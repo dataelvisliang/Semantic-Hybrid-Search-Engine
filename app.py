@@ -887,11 +887,11 @@ def main():
 
             for period in period_counts['period'].values[::-1]:
                 period_data = results_with_period[results_with_period['period'] == period]
-                period_sorted = period_data.nlargest(10, 'relevance_score')
+                period_sorted = period_data.nlargest(10, 'rerank_score')
 
                 with st.expander(f"📅 {period} ({len(period_data)} results)"):
                     for idx, row in period_sorted.iterrows():
-                        col_a, col_b = st.columns([4, 1])
+                        col_a, col_b, col_c = st.columns([3, 2, 1])
 
                         with col_a:
                             # Display the selected search target text
@@ -900,8 +900,21 @@ def main():
                             st.caption(f"{date_col}: {row[date_col]}")
 
                         with col_b:
-                            score_color = 'green' if row['relevance_score'] >= 0.8 else 'orange' if row['relevance_score'] >= 0.6 else 'red'
-                            st.markdown(f"Score: :{score_color}[**{row['relevance_score']:.3f}**]")
+                            # Display all search scores
+                            st.caption("**Scores:**")
+                            if 'hybrid_score' in row and row['hybrid_score'] > 0:
+                                st.caption(f"Hybrid: {row['hybrid_score']:.3f}")
+                            if 'semantic_score' in row:
+                                st.caption(f"Semantic: {row['semantic_score']:.3f}")
+                            if 'bm25_score' in row and row['bm25_score'] > 0:
+                                st.caption(f"BM25: {row['bm25_score']:.3f}")
+                            if 'char_ngram_score' in row and row['char_ngram_score'] > 0:
+                                st.caption(f"Char N-gram: {row['char_ngram_score']:.3f}")
+
+                        with col_c:
+                            score_color = 'green' if row['rerank_score'] >= 0.8 else 'orange' if row['rerank_score'] >= 0.6 else 'red'
+                            st.markdown(f"**Rerank**")
+                            st.markdown(f":{score_color}[**{row['rerank_score']:.3f}**]")
                             st.caption(f"{score_col}: {row[score_col]}")
 
                         st.markdown("---")
