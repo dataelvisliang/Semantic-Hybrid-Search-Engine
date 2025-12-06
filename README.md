@@ -1,6 +1,6 @@
-# Semantic Search Engine
+# Hybrid Semantic Search Engine
 
-A **universal, configuration-driven semantic search and analytics platform** that works with any text dataset. Just provide your CSV, configure which columns to search, and get instant semantic intelligence.
+A **universal, configuration-driven hybrid search and analytics platform** that combines semantic search, keyword matching (BM25), and typo-tolerant fuzzy search with diversity optimization (MMR). Works with any text dataset - just provide your CSV, configure which columns to search, and get production-grade search intelligence.
 
 ## 🎯 What Makes This Universal
 
@@ -17,12 +17,23 @@ Unlike traditional search tools locked to specific use cases, this engine adapts
 
 ## ✨ Key Features
 
-- 🔧 **Fully Configurable** - YAML-based config for any dataset structure
+### Search Capabilities
+- 🚀 **Hybrid Search** - Combines 3 search methods for maximum accuracy:
+  - **Semantic Embeddings** - Understands meaning and context
+  - **BM25 Keyword Matching** - Captures exact terms and importance
+  - **Char N-gram TF-IDF** - Handles typos and fuzzy matching
+- 🎨 **MMR Diversity** - Maximal Marginal Relevance to reduce redundant results
+- 🎯 **Two-Stage Retrieval** - Hybrid retrieval → BGE cross-encoder reranking
 - 🔍 **Multi-Column Search** - Embed and search across multiple text fields
+
+### Analytics & Visualization
 - 📊 **Dynamic Metadata** - Choose any date column for trends, any numeric column for distributions
-- 🎯 **Two-Stage Retrieval** - Fast cosine similarity → precise BGE reranking
 - 📈 **Time Trend Analysis** - Visualize mentions over time (day/month/year)
-- 🥧 **Score Distribution** - Understand relevance patterns
+- 🥧 **Score Distribution** - Understand rating and relevance patterns
+
+### Configuration & Performance
+- 🔧 **Fully Configurable** - YAML-based config for any dataset structure
+- ⚙️ **Tunable Weights** - Adjust semantic, BM25, and char n-gram contributions
 - 🔒 **100% Local** - No API keys, no external services, runs fully offline
 - ⚡ **Production-Ready** - Handles 100K+ documents in seconds
 
@@ -74,13 +85,18 @@ metadata:
 
 See the [Configuration Guide](#-configuration-guide) for full options.
 
-### 4. Generate Embeddings
+### 4. Generate Embeddings and Indexes
 
 ```bash
 python generate_embeddings.py
 ```
 
-This one-time process creates embeddings for all configured text columns. Time varies based on dataset size (approximately 1-2 minutes per 10,000 records).
+This one-time process creates:
+- **Semantic embeddings** for all configured text columns
+- **BM25 indexes** for keyword matching
+- **Char n-gram TF-IDF indexes** for typo-tolerant search
+
+Time varies based on dataset size (approximately 1-2 minutes per 10,000 records).
 
 ### 5. Launch the App
 
@@ -241,28 +257,51 @@ metadata:
 
 ## 🔧 How It Works
 
-### Two-Stage Semantic Search
+### Three-Stage Hybrid Search Pipeline
 
-**Stage 1: Fast Retrieval (Cosine Similarity)**
-- Encodes your query into a vector using sentence-transformers
-- Compares against all pre-computed document embeddings
-- Retrieves top-K most similar candidates (sub-second on 100K+ docs)
+**Stage 1: Hybrid Retrieval**
+
+The system combines three complementary search methods:
+
+1. **Semantic Search (Sentence Transformers)**
+   - Encodes query into dense vector using all-MiniLM-L6-v2
+   - Compares against pre-computed document embeddings via cosine similarity
+   - Captures meaning and context
+
+2. **BM25 Keyword Search**
+   - Classic TF-IDF-based ranking algorithm
+   - Excellent for exact keyword matches and importance weighting
+   - Handles specific terms and proper nouns
+
+3. **Character N-gram TF-IDF**
+   - Character-level (2-4 grams) fuzzy matching
+   - Robust to typos, misspellings, and variations
+   - Complements semantic search for short queries
+
+**Weighted Fusion**: Results from all three methods are combined using configurable weights (default: 0.5 semantic + 0.3 BM25 + 0.2 char n-gram).
 
 **Stage 2: Precise Reranking (BGE Cross-Encoder)**
-- Takes top candidates from Stage 1
+- Takes top-K candidates from Stage 1
 - Uses BGE reranker (BAAI/bge-reranker-base) for deep semantic scoring
-- Returns only highly relevant results above your threshold
+- More accurate but slower than Stage 1, so applied only to top candidates
 
-This hybrid approach balances **speed** (Stage 1) and **accuracy** (Stage 2).
+**Stage 3: MMR Diversity (Optional)**
+- Maximal Marginal Relevance algorithm
+- Reduces redundancy by penalizing similar documents
+- Balances relevance and diversity using lambda parameter
 
-### Why This Beats Keyword Search
+This multi-stage approach optimizes **speed** (Stage 1), **accuracy** (Stage 2), and **diversity** (Stage 3).
 
-| Keyword Search | Semantic Search |
-|----------------|-----------------|
+### Why This Beats Traditional Search
+
+| Traditional Search | Hybrid Semantic Search |
+|-------------------|------------------------|
 | *"fast shipping"* only finds exact phrase | Finds *"arrived quickly"*, *"next-day delivery"*, *"shipped fast"* |
 | Misses 60-80% of relevant results | 95%+ recall across all phrasings |
-| Can't handle typos | Handles *"recieved"* vs *"received"* naturally |
+| Breaks on typos (*"recieve"*) | Char n-grams + semantic handle *"recieved"*, *"recevied"* naturally |
 | No context understanding | Distinguishes *"great"* (positive) from *"great, but broke"* (negative) |
+| Returns many duplicates | MMR ensures diverse, non-redundant results |
+| Pure semantic misses rare keywords | BM25 captures specific technical terms and proper nouns |
 
 ## 📦 Output Files
 
@@ -270,14 +309,19 @@ After running `generate_embeddings.py`:
 
 ```
 embeddings/
-├── summary_embeddings.npz      # Embeddings for "summary" text column
-├── description_embeddings.npz  # Embeddings for "description" text column
-├── comments_embeddings.npz     # Embeddings for "comments" text column
+├── summary_embeddings.npz      # Semantic embeddings for "summary"
+├── summary_bm25.pkl            # BM25 index for "summary"
+├── summary_char_ngram.pkl      # Char n-gram TF-IDF for "summary"
+├── text_embeddings.npz         # Semantic embeddings for "text"
+├── text_bm25.pkl               # BM25 index for "text"
+├── text_char_ngram.pkl         # Char n-gram TF-IDF for "text"
 └── metadata.pkl                # All metadata (dates, scores, text, etc.)
 ```
 
 File sizes depend on dataset size:
-- ~1.4 MB per 1,000 records per text column
+- Semantic embeddings: ~1.4 MB per 1,000 records per column
+- BM25 indexes: ~2-5 MB per 10,000 records per column
+- Char n-gram indexes: ~10-20 MB per 10,000 records per column
 - Metadata: ~5-10 MB per 100,000 records
 
 ## 🚀 Deployment
@@ -386,6 +430,49 @@ Perfect for sensitive data: HR feedback, medical records, legal documents, propr
 - **Disk**: ~500MB for models + embedding file sizes
 - **CPU/GPU**: Works on both (GPU significantly faster for large datasets)
 
+## ⚙️ Advanced: Tuning Hybrid Search
+
+### Adjusting Search Weights
+
+In `config.yaml`, tune weights based on your use case:
+
+```yaml
+app:
+  # For technical docs with specific terminology
+  semantic_weight: 0.3
+  bm25_weight: 0.6          # Prioritize exact keyword matches
+  char_ngram_weight: 0.1
+
+  # For conversational data with varied phrasing
+  semantic_weight: 0.7      # Prioritize meaning
+  bm25_weight: 0.2
+  char_ngram_weight: 0.1
+
+  # For user-generated content with typos
+  semantic_weight: 0.4
+  bm25_weight: 0.3
+  char_ngram_weight: 0.3    # Increase typo tolerance
+```
+
+### MMR Diversity Settings
+
+```yaml
+app:
+  use_mmr: true
+  mmr_lambda: 0.7          # Higher = more relevance (0.5-0.9 recommended)
+  mmr_top_k: 20            # Number of diverse results
+```
+
+**When to use MMR:**
+- Customer feedback with repetitive phrases
+- Survey responses with template answers
+- Product reviews mentioning same issues
+
+**When to skip MMR:**
+- Exact match searches (e.g., ticket IDs)
+- Short result sets (<20 items)
+- When you want all similar documents
+
 ## 🤝 Contributing
 
 Contributions welcome! Areas for improvement:
@@ -395,6 +482,7 @@ Contributions welcome! Areas for improvement:
 - Multi-language support
 - Advanced filters (regex, faceted search)
 - Batch query processing
+- Hybrid search weight auto-tuning
 
 ## 📄 License
 
@@ -404,11 +492,13 @@ MIT License - use freely for personal or commercial projects.
 
 Built with:
 - [Streamlit](https://streamlit.io/) - Web framework
-- [Sentence Transformers](https://www.sbert.net/) - Embedding models
+- [Sentence Transformers](https://www.sbert.net/) - Semantic embedding models
 - [BGE Reranker](https://huggingface.co/BAAI/bge-reranker-base) - Cross-encoder reranking
+- [Rank-BM25](https://github.com/dorianbrown/rank_bm25) - BM25 keyword search
+- [scikit-learn](https://scikit-learn.org/) - Char n-gram TF-IDF
 - [Plotly](https://plotly.com/) - Interactive visualizations
 
 ---
 
 **This isn't another keyword dashboard.**
-**This is production-grade semantic intelligence - local, instant, and actually accurate.**
+**This is production-grade hybrid search - combining semantic AI, keyword precision, and fuzzy matching - all local, instant, and actually accurate.**

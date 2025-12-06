@@ -1,5 +1,6 @@
 """
-Semantic Search Engine - Generic text analytics with embeddings
+Hybrid Semantic Search Engine - Multi-strategy search with diversity
+Features: Semantic embeddings + BM25 + Char n-gram TF-IDF + MMR diversity
 Configurable via config.yaml
 """
 
@@ -12,9 +13,12 @@ from pathlib import Path
 from datetime import datetime
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.feature_extraction.text import TfidfVectorizer
+from rank_bm25 import BM25Okapi
 import plotly.express as px
 import plotly.graph_objects as go
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
+import re
 
 
 # Load configuration
@@ -43,6 +47,10 @@ st.set_page_config(
 # Initialize session state
 if 'embeddings' not in st.session_state:
     st.session_state.embeddings = {}
+if 'bm25_indexes' not in st.session_state:
+    st.session_state.bm25_indexes = {}
+if 'char_ngram_indexes' not in st.session_state:
+    st.session_state.char_ngram_indexes = {}
 if 'metadata' not in st.session_state:
     st.session_state.metadata = None
 if 'model' not in st.session_state:
@@ -74,26 +82,41 @@ def load_embeddings_and_metadata(config: Dict[str, Any]):
     metadata_path = output_dir / 'metadata.pkl'
 
     if not metadata_path.exists():
-        return None, None
+        return None, None, None, None
 
     # Load all embedding files
     embeddings = {}
+    bm25_indexes = {}
+    char_ngram_indexes = {}
+
     for text_col in config['text_columns']:
         internal_name = text_col['name']
-        emb_path = output_dir / f'{internal_name}_embeddings.npz'
 
+        # Load semantic embeddings
+        emb_path = output_dir / f'{internal_name}_embeddings.npz'
         if not emb_path.exists():
             st.error(f"❌ Embedding file not found: {emb_path}")
-            return None, None
-
+            return None, None, None, None
         emb_data = np.load(emb_path)
         embeddings[internal_name] = emb_data['embeddings']
+
+        # Load BM25 index
+        bm25_path = output_dir / f'{internal_name}_bm25.pkl'
+        if bm25_path.exists():
+            with open(bm25_path, 'rb') as f:
+                bm25_indexes[internal_name] = pickle.load(f)
+
+        # Load char n-gram index
+        char_ngram_path = output_dir / f'{internal_name}_char_ngram.pkl'
+        if char_ngram_path.exists():
+            with open(char_ngram_path, 'rb') as f:
+                char_ngram_indexes[internal_name] = pickle.load(f)
 
     # Load metadata
     with open(metadata_path, 'rb') as f:
         metadata = pickle.load(f)
 
-    return embeddings, metadata
+    return embeddings, bm25_indexes, char_ngram_indexes, metadata
 
 
 def rerank_with_bge(query: str, texts: list, reranker: CrossEncoder) -> list:
@@ -112,6 +135,12 @@ def rerank_with_bge(query: str, texts: list, reranker: CrossEncoder) -> list:
     return normalized_scores.tolist()
 
 
+def tokenize_for_bm25(text: str) -> List[str]:
+    """Simple tokenizer for BM25."""
+    tokens = re.findall(r'\w+', text.lower())
+    return tokens
+
+
 def semantic_search(query_embedding, embeddings, top_k=500):
     """
     Perform cosine similarity search
@@ -121,6 +150,154 @@ def semantic_search(query_embedding, embeddings, top_k=500):
     top_scores = similarities[top_indices]
 
     return top_indices, top_scores
+
+
+def bm25_search(query: str, bm25_index, top_k=500):
+    """
+    Perform BM25 search for keyword matching
+    """
+    query_tokens = tokenize_for_bm25(query)
+    scores = bm25_index.get_scores(query_tokens)
+    top_indices = np.argsort(scores)[::-1][:top_k]
+    top_scores = scores[top_indices]
+
+    return top_indices, top_scores
+
+
+def char_ngram_search(query: str, char_ngram_vectorizer, metadata_texts, top_k=500):
+    """
+    Perform character n-gram search for typo tolerance
+    """
+    # Transform query
+    query_vec = char_ngram_vectorizer.transform([query])
+
+    # Transform all texts
+    corpus_vec = char_ngram_vectorizer.transform(metadata_texts)
+
+    # Calculate cosine similarity
+    similarities = cosine_similarity(query_vec, corpus_vec)[0]
+
+    top_indices = np.argsort(similarities)[::-1][:top_k]
+    top_scores = similarities[top_indices]
+
+    return top_indices, top_scores
+
+
+def hybrid_search(
+    query: str,
+    query_embedding: np.ndarray,
+    embeddings: np.ndarray,
+    bm25_index,
+    char_ngram_vectorizer,
+    metadata_texts: List[str],
+    top_k: int = 500,
+    semantic_weight: float = 0.5,
+    bm25_weight: float = 0.3,
+    char_ngram_weight: float = 0.2
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Hybrid search combining semantic, BM25, and char n-gram scores
+    """
+    num_docs = len(embeddings)
+
+    # Initialize combined scores
+    combined_scores = np.zeros(num_docs)
+
+    # 1. Semantic search
+    sem_indices, sem_scores = semantic_search(query_embedding, embeddings, top_k=num_docs)
+    sem_scores_full = np.zeros(num_docs)
+    sem_scores_full[sem_indices] = sem_scores
+    combined_scores += semantic_weight * sem_scores_full
+
+    # 2. BM25 search
+    if bm25_index is not None:
+        bm25_indices, bm25_scores = bm25_search(query, bm25_index, top_k=num_docs)
+        # Normalize BM25 scores to 0-1 range
+        if bm25_scores.max() > 0:
+            bm25_scores_normalized = bm25_scores / bm25_scores.max()
+        else:
+            bm25_scores_normalized = bm25_scores
+        bm25_scores_full = np.zeros(num_docs)
+        bm25_scores_full[bm25_indices] = bm25_scores_normalized
+        combined_scores += bm25_weight * bm25_scores_full
+
+    # 3. Char n-gram search
+    if char_ngram_vectorizer is not None and metadata_texts is not None:
+        char_indices, char_scores = char_ngram_search(query, char_ngram_vectorizer, metadata_texts, top_k=num_docs)
+        char_scores_full = np.zeros(num_docs)
+        char_scores_full[char_indices] = char_scores
+        combined_scores += char_ngram_weight * char_scores_full
+
+    # Get top-k results
+    top_indices = np.argsort(combined_scores)[::-1][:top_k]
+    top_scores = combined_scores[top_indices]
+
+    return top_indices, top_scores
+
+
+def maximal_marginal_relevance(
+    query_embedding: np.ndarray,
+    doc_embeddings: np.ndarray,
+    doc_indices: np.ndarray,
+    relevance_scores: np.ndarray,
+    top_k: int = 20,
+    lambda_param: float = 0.5
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Apply MMR to diversify results
+
+    Args:
+        query_embedding: Query embedding vector
+        doc_embeddings: All document embeddings
+        doc_indices: Indices of candidate documents
+        relevance_scores: Relevance scores for candidates
+        top_k: Number of diverse results to return
+        lambda_param: Trade-off between relevance and diversity (0-1)
+                     Higher = more relevance, Lower = more diversity
+
+    Returns:
+        Selected indices and their scores
+    """
+    selected_indices = []
+    selected_scores = []
+    remaining_indices = list(doc_indices)
+    remaining_scores = relevance_scores.copy()
+
+    # Get embeddings for candidate documents
+    candidate_embeddings = doc_embeddings[doc_indices]
+
+    for _ in range(min(top_k, len(remaining_indices))):
+        if not remaining_indices:
+            break
+
+        mmr_scores = []
+        for i, idx in enumerate(remaining_indices):
+            # Relevance score
+            relevance = remaining_scores[i]
+
+            # Diversity score (max similarity to already selected documents)
+            if selected_indices:
+                selected_embeddings = doc_embeddings[selected_indices]
+                current_embedding = doc_embeddings[idx].reshape(1, -1)
+                similarities = cosine_similarity(current_embedding, selected_embeddings)[0]
+                max_similarity = similarities.max()
+            else:
+                max_similarity = 0
+
+            # MMR score
+            mmr_score = lambda_param * relevance - (1 - lambda_param) * max_similarity
+            mmr_scores.append(mmr_score)
+
+        # Select document with highest MMR score
+        best_idx = np.argmax(mmr_scores)
+        selected_indices.append(remaining_indices[best_idx])
+        selected_scores.append(remaining_scores[best_idx])
+
+        # Remove selected document from candidates
+        remaining_indices.pop(best_idx)
+        remaining_scores = np.delete(remaining_scores, best_idx)
+
+    return np.array(selected_indices), np.array(selected_scores)
 
 
 def aggregate_by_period(df, date_column, period='month'):
@@ -252,8 +429,8 @@ def main():
     with st.sidebar:
         st.header("⚙️ Configuration")
 
-        # Check for embeddings
-        embeddings, metadata = load_embeddings_and_metadata(CONFIG)
+        # Check for embeddings and indexes
+        embeddings, bm25_indexes, char_ngram_indexes, metadata = load_embeddings_and_metadata(CONFIG)
 
         if embeddings is None or metadata is None:
             st.error("⚠️ Embeddings not found! Please run generate_embeddings.py first.")
@@ -262,6 +439,8 @@ def main():
 
         # Store in session state
         st.session_state.embeddings = embeddings
+        st.session_state.bm25_indexes = bm25_indexes
+        st.session_state.char_ngram_indexes = char_ngram_indexes
         st.session_state.metadata = metadata
 
         # Load models
@@ -302,15 +481,23 @@ def main():
     )
 
     st.markdown("##### Search Parameters")
+
+    # Hybrid search mode selector
+    use_hybrid = st.checkbox(
+        "🚀 Enable Hybrid Search (Semantic + BM25 + Char N-gram)",
+        value=True,
+        help="Combine semantic, keyword (BM25), and typo-tolerant (char n-gram) search for best results"
+    )
+
     col1, col2 = st.columns([1, 1])
     with col1:
         top_k_retrieval = st.slider(
-            "🔍 Top-K for Cosine Similarity",
+            "🔍 Top-K for Hybrid Retrieval" if use_hybrid else "🔍 Top-K for Cosine Similarity",
             min_value=100,
             max_value=20000,
             value=CONFIG['app'].get('default_top_k_retrieval', 1000),
             step=100,
-            help="Number of candidates to retrieve using cosine similarity. Higher = more comprehensive but slower."
+            help="Number of candidates to retrieve. Higher = more comprehensive but slower."
         )
     with col2:
         top_k_rerank = st.slider(
@@ -319,8 +506,69 @@ def main():
             max_value=5000,
             value=CONFIG['app'].get('default_top_k_rerank', 500),
             step=50,
-            help="Number of top candidates to rerank with BGE. Must be ≤ cosine similarity top-k. Higher = better quality but slower."
+            help="Number of top candidates to rerank with BGE. Must be ≤ retrieval top-k. Higher = better quality but slower."
         )
+
+    # Hybrid search weight controls
+    if use_hybrid:
+        with st.expander("⚙️ Advanced: Hybrid Search Weights", expanded=False):
+            st.markdown("Adjust the contribution of each search method:")
+            col_w1, col_w2, col_w3 = st.columns(3)
+            with col_w1:
+                semantic_weight = st.slider(
+                    "Semantic",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=CONFIG['app'].get('semantic_weight', 0.5),
+                    step=0.1,
+                    help="Weight for semantic (embedding) similarity"
+                )
+            with col_w2:
+                bm25_weight = st.slider(
+                    "BM25",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=CONFIG['app'].get('bm25_weight', 0.3),
+                    step=0.1,
+                    help="Weight for keyword matching (BM25)"
+                )
+            with col_w3:
+                char_ngram_weight = st.slider(
+                    "Char N-gram",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=CONFIG['app'].get('char_ngram_weight', 0.2),
+                    step=0.1,
+                    help="Weight for typo-tolerant matching"
+                )
+
+    # MMR diversity controls
+    use_mmr = st.checkbox(
+        "🎨 Enable MMR Diversity",
+        value=CONFIG['app'].get('use_mmr', False),
+        help="Use Maximal Marginal Relevance to diversify results and reduce redundancy"
+    )
+
+    if use_mmr:
+        col_mmr1, col_mmr2 = st.columns([1, 1])
+        with col_mmr1:
+            mmr_lambda = st.slider(
+                "MMR Lambda (Relevance vs Diversity)",
+                min_value=0.0,
+                max_value=1.0,
+                value=CONFIG['app'].get('mmr_lambda', 0.5),
+                step=0.1,
+                help="Higher = more relevance, Lower = more diversity"
+            )
+        with col_mmr2:
+            mmr_top_k = st.slider(
+                "MMR Top-K Results",
+                min_value=10,
+                max_value=100,
+                value=CONFIG['app'].get('mmr_top_k', 20),
+                step=5,
+                help="Number of diverse results to show"
+            )
 
     # Ensure rerank top_k doesn't exceed retrieval top_k
     if top_k_rerank > top_k_retrieval:
@@ -371,17 +619,40 @@ def main():
                 normalize_embeddings=True
             )[0]
 
-        # Step 2: Semantic search using selected target embeddings
-        st.info(f"🔍 Searching in {search_target_display[selected_target]}...")
-
+        # Step 2: Hybrid or Semantic search
         selected_embeddings = st.session_state.embeddings[selected_target]
 
-        with st.spinner(f"Finding top {top_k_retrieval} similar items..."):
-            top_indices, cos_scores = semantic_search(
-                query_embedding,
-                selected_embeddings,
-                top_k=top_k_retrieval
-            )
+        if use_hybrid:
+            st.info(f"🚀 Hybrid search in {search_target_display[selected_target]} (Semantic + BM25 + Char N-gram)...")
+
+            # Get BM25 and char n-gram indexes
+            bm25_index = st.session_state.bm25_indexes.get(selected_target, None)
+            char_ngram_index = st.session_state.char_ngram_indexes.get(selected_target, None)
+            metadata_texts = st.session_state.metadata[selected_target].tolist() if char_ngram_index else None
+
+            with st.spinner(f"Finding top {top_k_retrieval} candidates with hybrid search..."):
+                top_indices, hybrid_scores = hybrid_search(
+                    query=search_query,
+                    query_embedding=query_embedding,
+                    embeddings=selected_embeddings,
+                    bm25_index=bm25_index,
+                    char_ngram_vectorizer=char_ngram_index,
+                    metadata_texts=metadata_texts,
+                    top_k=top_k_retrieval,
+                    semantic_weight=semantic_weight if 'semantic_weight' in locals() else 0.5,
+                    bm25_weight=bm25_weight if 'bm25_weight' in locals() else 0.3,
+                    char_ngram_weight=char_ngram_weight if 'char_ngram_weight' in locals() else 0.2
+                )
+            cos_scores = hybrid_scores  # Use hybrid scores as cos_scores for compatibility
+        else:
+            st.info(f"🔍 Semantic search in {search_target_display[selected_target]}...")
+
+            with st.spinner(f"Finding top {top_k_retrieval} similar items..."):
+                top_indices, cos_scores = semantic_search(
+                    query_embedding,
+                    selected_embeddings,
+                    top_k=top_k_retrieval
+                )
 
         # Step 3: Select top candidates for reranking
         rerank_indices = top_indices[:top_k_rerank]
@@ -403,20 +674,43 @@ def main():
 
             rerank_scores = np.array(rerank_scores)
 
-        # Step 5: Filter by threshold
-        mask = rerank_scores >= score_threshold
+        # Step 5: Apply MMR for diversity (if enabled)
+        if use_mmr:
+            st.info(f"🎨 Applying MMR diversity to select top {mmr_top_k if 'mmr_top_k' in locals() else 20} diverse results...")
 
-        filtered_indices = rerank_indices[mask]
-        filtered_scores = rerank_scores[mask]
+            with st.spinner("Diversifying results with MMR..."):
+                mmr_indices, mmr_scores = maximal_marginal_relevance(
+                    query_embedding=query_embedding,
+                    doc_embeddings=selected_embeddings,
+                    doc_indices=rerank_indices,
+                    relevance_scores=rerank_scores,
+                    top_k=mmr_top_k if 'mmr_top_k' in locals() else 20,
+                    lambda_param=mmr_lambda if 'mmr_lambda' in locals() else 0.5
+                )
 
-        # Get corresponding cosine similarity scores for filtered results
-        filtered_cos_scores = cos_scores[:top_k_rerank][mask]
+            # Use MMR results
+            filtered_indices = mmr_indices
+            filtered_scores = mmr_scores
+
+            # Get corresponding initial scores
+            filtered_cos_scores_dict = dict(zip(top_indices, cos_scores))
+            filtered_cos_scores = np.array([filtered_cos_scores_dict.get(idx, 0) for idx in filtered_indices])
+
+        else:
+            # Step 5 (original): Filter by threshold
+            mask = rerank_scores >= score_threshold
+
+            filtered_indices = rerank_indices[mask]
+            filtered_scores = rerank_scores[mask]
+
+            # Get corresponding cosine similarity scores for filtered results
+            filtered_cos_scores = cos_scores[:top_k_rerank][mask]
 
         if len(filtered_indices) == 0:
             st.warning(f"No results found with relevance score > {score_threshold:.2f}. Try lowering the score threshold or a different query.")
             st.stop()
 
-        st.success(f"✅ Found {len(filtered_indices)} highly relevant results (score > {score_threshold:.2f})")
+        st.success(f"✅ Found {len(filtered_indices)} highly relevant results" + (f" (score > {score_threshold:.2f})" if not use_mmr else ""))
 
         # Step 6: Prepare results dataframe
         date_col = CONFIG['metadata']['date_column']

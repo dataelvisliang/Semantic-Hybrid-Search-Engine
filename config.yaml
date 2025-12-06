@@ -55,7 +55,7 @@ metadata:
 
 # Application settings
 app:
-  title: "Semantic Search Engine"
+  title: "Hybrid Semantic Search Engine"
   page_icon: "🔍"
 
   # Default search target (must match one of the text_columns "name" values)
@@ -68,6 +68,17 @@ app:
   default_top_k_retrieval: 1000
   default_top_k_rerank: 500
   default_score_threshold: 0.60
+
+  # Hybrid search weights (must sum to reasonable values, typically ~1.0)
+  semantic_weight: 0.5      # Weight for semantic (embedding) similarity
+  bm25_weight: 0.3          # Weight for keyword matching (BM25)
+  char_ngram_weight: 0.2    # Weight for typo-tolerant char n-gram matching
+
+  # MMR (Maximal Marginal Relevance) diversity settings
+  use_mmr: false            # Enable/disable MMR diversity by default
+  mmr_lambda: 0.5           # Trade-off between relevance and diversity (0-1)
+                            # Higher = more relevance, Lower = more diversity
+  mmr_top_k: 20             # Number of diverse results to show when MMR is enabled
 
 # Embedding settings
 embeddings:
