@@ -69,3 +69,53 @@ Id,ProductId,UserId,REALDATE,RATING,Summary,Text
 68,B054,U068,2024-08-28,4,Great multi-cooker,Makes cooking so convenient. Rice and soups come out perfect. Yogurt function works well. Wish it was a bit larger.
 69,B055,U069,2024-09-01,3,Learning curve,Takes time to figure out all the functions. Results are good once you get it. Instructions could be clearer. Decent appliance.
 70,B056,U070,2024-09-03,5,Best webcam for streaming,Video quality is crystal clear even in low light. Autofocus works flawlessly. Makes me look professional on video calls. Highly recommend.
+71,B057,U071,2024-09-05,4,Good webcam but pricey,Video qualitty is excelent but the price is steep. Microphone is decent. Setup was easy and works great with Zoom.
+72,B058,U072,2024-09-08,1,Shipping was terrible,Package arrived 3 weeks late. Product was fine but the shipping experience was awfull. No tracking updates. Very frusturating.
+73,B059,U073,2024-09-10,5,Fantastic wireless mouse,Battery lasts forever and tracking is precice. Ergonomic design feels great in hand. No more wrist pain after long work days.
+74,B060,U074,2024-09-12,4,Comfortable mouse,Very comfortabel for extended use. The wireless conection is stable. Buttons are responsive. Only wish it had more programable buttons.
+75,B061,U075,2024-09-15,2,Connectivity problems,Mouse disconects randomly. Tried new batteries but issue persists. Frustrating when working on important projects.
+76,B062,U076,2024-09-18,5,Best noise cancelling headphones,The noise cancelation is incredable. Complete silence on flights. Sound quality is pristine. Comfort is unmatched even after 8 hours.
+77,B062,U077,2024-09-20,5,Perfect for travel,Eliminates airplane noise completley. Battery life exceeds advertised specs. Folds compactly for packing. Worth every cent for frequent flyers.
+78,B063,U078,2024-09-22,3,Good but heavy,Sound is good and noise cancelation works. But they're quite heavy and cause neck strain. Padding could be thicker.
+79,B064,U079,2024-09-25,5,Amazing slow cooker,Meat comes out tender every time. Set it in morning and dinner is ready when I get home. Easy cleanup. Kitchen essential.
+80,B065,U080,2024-09-28,4,Convenient for busy schedules,Love the timed cooking feature. Makes meal planing easy. Portions are generous. Ceramic insert is dishwasher safe.
+81,B066,U081,2024-10-01,2,Temperature issues,Food cooks unevenly. Some parts overcooked while others undercooked. Temperature control seems unreliable. Disapointing purchase.
+82,B067,U082,2024-10-03,5,Perfect electric kettle,Boils water super fast. Quiet operation. Auto shutoff is a great safety feature. Looks elegant on counter.
+83,B068,U083,2024-10-05,4,Fast boiling,Boils water in under 2 minutes. Temperature presets are usefull for different teas. Cord could be longer though.
+84,B069,U084,2024-10-08,3,Basic kettle,Does what its supposed to. Nothing fancy. Build quality is okay. Gets the job done for morning coffee.
+85,B070,U085,2024-10-10,5,Best external hard drive,Transfer speeds are incredably fast. 2TB storage is plenty for my needs. Compact and portable. Reliable backup solution.
+86,B070,U086,2024-10-12,5,Reliable storage,Never had any data loss issues. Fast read/write speeds. Perfect for video editing. Excellent build quality.
+87,B071,U087,2024-10-15,1,Drive failed after month,Lost all my data when drive suddenly died. No warning signs. Terrible reliablity. Avoid this product.
+88,B072,U088,2024-10-18,5,Excellent phone mount,Holds phone securly even on bumpy roads. Easy one-hand operation. Strong suction cup. Perfect for navigation.
+89,B073,U089,2024-10-20,4,Sturdy car mount,Very stable and adjustable. Works with thick phone cases. Suction occasionally needs repositioning but overall great.
+90,B074,U090,2024-10-22,2,Falls off constantly,Phone keeps falling during drives. Suction doesnt hold well. Tried different positions. Not recomended for daily use.
+91,B075,U091,2024-10-25,5,Best digital scale,Accurate measurements every time. Tare function is handy for cooking. Compact design saves counter space. Essential kitchen tool.
+92,B076,U092,2024-10-28,4,Precise and reliable,Very accurate readings. Easy to clean glass surface. Battery lasts long time. Good value for money.
+93,B077,U093,2024-11-01,3,Decent scale,Works fine for basic needs. Calibration seems to drift over time. Display could be bigger. Adequate for the price.
+94,B078,U094,2024-11-03,5,Perfect bike lock,Extremely secure and heavy duty. Combination mechanism is smooth. Weather resistant coating. Peace of mind for expensive bikes.
+95,B079,U095,2024-11-05,4,Strong lock,Feels very solid and secure. Cable is thick and durable. A bit heavy to carry but thats the tradeoff for security.
+96,B080,U096,2024-11-08,1,Key broke inside lock,The key snaped off inside the lock on third use. Couldnt remove bike. Had to cut the lock. Terrible quality control.
+97,B081,U097,2024-11-10,5,Amazing air fryer,Food comes out crispy without oil. Healthier cooking made easy. Cleanup is a breeze. Family loves everything I make.
+98,B081,U098,2024-11-12,5,Healthier frying,French fries taste amazing with minimal oil. Chicken wings are perfectly crispy. Preheats quickly. Best kitchen gadget.
+99,B082,U099,2024-11-15,2,Small capacity,Basket is too small for family meals. Have to cook in multiple batches. Takes forever to make dinner. Not practical.
+100,B083,U100,2024-11-18,5,Incredible umbrella,Windproof design actually works. Stays intact in storms. Auto open/close is convenient. Compact when folded.
+101,B084,U101,2024-11-20,4,Durable umbrella,Survived several windy days without flipping. Canopy is large enough for two people. Handle is comfortable. Great purchase.
+102,B085,U102,2024-11-22,3,Average umbrella,Does the job in light rain. Struggled in wind. Mechanism is okay. Nothing exceptional but funcional.
+103,B086,U103,2024-11-25,5,Perfect massage gun,Deep tissue relief is amazing. Multiple speed settings and heads. Quiet motor. Helps recovery after workouts tremendously.
+104,B087,U104,2024-11-28,4,Great for sore muscles,Really helps with muscle tension and knots. Battery lasts several sessions. Carrying case is nice touch. Highly recomend.
+105,B088,U105,2024-12-01,2,Too powerful,Even lowest setting is too intense. Leaves bruises on sensitive areas. Battery dies quickly. Not for beginners.
+106,B089,U106,2024-12-03,5,Best wireless earbuds,Sound quality rivals expensive brands. Fit is secure for running. Battery life is outstanding. Case is pocketable.
+107,B089,U107,2024-12-05,5,Perfect for workouts,Stay in ears during intense exercise. Sweat resistant works as advertised. Touch controls are intuitive. Love these.
+108,B090,U108,2024-12-08,1,Connection drops constantly,Audio cuts out every few minutes. Pairing is problematic. Battery drains fast. Very frustating experience.
+109,B091,U109,2024-12-10,5,Excellent water bottle,Keeps water cold for 24 hours. No condensation on outside. Wide mouth is easy to clean. Perfect for gym and hiking.
+110,B092,U110,2024-12-12,4,Great insulation,Ice stays frozen all day. Durable construction. Fits in car cup holder. Lid could seal better but overall happy.
+111,B093,U111,2024-12-15,3,Leaks sometimes,Insulation works well but lid leaks if not tightened perfectly. Dent easily. Decent but not amazing.
+112,B094,U112,2024-12-18,5,Perfect reading light,Adjustable brightness is perfect for bedtime reading. Clamps securely to book or headboard. Rechargable battery lasts weeks.
+113,B095,U113,2024-12-20,4,Good book light,Bright enough without straining eyes. Flexible neck stays in position. USB charging is convenient. Minor complaint is weight.
+114,B096,U114,2024-12-22,2,Too bright,Even dimmest setting is too bright for night reading. Clip is weak. Battery dies faster than advertised. Disappointed.
+115,B097,U115,2024-12-25,5,Amazing portable speaker,Sound quality is shockingly good for the size. Bass is impressive. Waterproof for pool parties. Battery lasts entire day.
+116,B097,U116,2024-12-28,5,Perfect outdoor speaker,Survived rain and drops without issues. Bluetooth range is excellent. Pairs easily with multiple devices. Party essential.
+117,B098,U117,2024-12-30,3,Decent sound,Audio is acceptable for the price. Bass is lacking. Bluetooth connection is stable. Battery life is average.
+118,B099,U118,2025-01-02,5,Best gardening gloves,Durable yet comfortable. Grip is excellent even when wet. Breathable material prevents sweating. Perfect for yard work.
+119,B100,U119,2025-01-05,4,Protective and flexible,Great protection from thorns. Fingers have good dexterity. Easy to wash. Sizing runs slightly small.
+120,B101,U120,2025-01-08,2,Tore quickly,Developed holes after few uses. Stitching came apart. Not durable enough for gardening. Waste of money.

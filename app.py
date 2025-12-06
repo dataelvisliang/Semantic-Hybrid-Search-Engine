@@ -194,22 +194,32 @@ def hybrid_search(
     semantic_weight: float = 0.5,
     bm25_weight: float = 0.3,
     char_ngram_weight: float = 0.2
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
     """
     Hybrid search combining semantic, BM25, and char n-gram scores
+
+    Returns:
+        top_indices: Indices of top results
+        top_scores: Combined hybrid scores
+        component_scores: Dict with individual scores (semantic, bm25, char_ngram)
     """
     num_docs = len(embeddings)
 
     # Initialize combined scores
     combined_scores = np.zeros(num_docs)
 
+    # Store individual component scores
+    component_scores = {}
+
     # 1. Semantic search
     sem_indices, sem_scores = semantic_search(query_embedding, embeddings, top_k=num_docs)
     sem_scores_full = np.zeros(num_docs)
     sem_scores_full[sem_indices] = sem_scores
+    component_scores['semantic'] = sem_scores_full
     combined_scores += semantic_weight * sem_scores_full
 
     # 2. BM25 search
+    bm25_scores_full = np.zeros(num_docs)
     if bm25_index is not None:
         bm25_indices, bm25_scores = bm25_search(query, bm25_index, top_k=num_docs)
         # Normalize BM25 scores to 0-1 range
@@ -217,22 +227,23 @@ def hybrid_search(
             bm25_scores_normalized = bm25_scores / bm25_scores.max()
         else:
             bm25_scores_normalized = bm25_scores
-        bm25_scores_full = np.zeros(num_docs)
         bm25_scores_full[bm25_indices] = bm25_scores_normalized
         combined_scores += bm25_weight * bm25_scores_full
+    component_scores['bm25'] = bm25_scores_full
 
     # 3. Char n-gram search
+    char_scores_full = np.zeros(num_docs)
     if char_ngram_vectorizer is not None and metadata_texts is not None:
         char_indices, char_scores = char_ngram_search(query, char_ngram_vectorizer, metadata_texts, top_k=num_docs)
-        char_scores_full = np.zeros(num_docs)
         char_scores_full[char_indices] = char_scores
         combined_scores += char_ngram_weight * char_scores_full
+    component_scores['char_ngram'] = char_scores_full
 
     # Get top-k results
     top_indices = np.argsort(combined_scores)[::-1][:top_k]
     top_scores = combined_scores[top_indices]
 
-    return top_indices, top_scores
+    return top_indices, top_scores, component_scores
 
 
 def maximal_marginal_relevance(
@@ -621,6 +632,7 @@ def main():
 
         # Step 2: Hybrid or Semantic search
         selected_embeddings = st.session_state.embeddings[selected_target]
+        component_scores_dict = None  # Will store individual scores
 
         if use_hybrid:
             st.info(f"🚀 Hybrid search in {search_target_display[selected_target]} (Semantic + BM25 + Char N-gram)...")
@@ -631,7 +643,7 @@ def main():
             metadata_texts = st.session_state.metadata[selected_target].tolist() if char_ngram_index else None
 
             with st.spinner(f"Finding top {top_k_retrieval} candidates with hybrid search..."):
-                top_indices, hybrid_scores = hybrid_search(
+                top_indices, hybrid_scores, component_scores_dict = hybrid_search(
                     query=search_query,
                     query_embedding=query_embedding,
                     embeddings=selected_embeddings,
@@ -653,6 +665,9 @@ def main():
                     selected_embeddings,
                     top_k=top_k_retrieval
                 )
+            # Store semantic scores for non-hybrid mode
+            component_scores_dict = {'semantic': np.zeros(len(selected_embeddings))}
+            component_scores_dict['semantic'][top_indices] = cos_scores
 
         # Step 3: Select top candidates for reranking
         rerank_indices = top_indices[:top_k_rerank]
@@ -718,8 +733,11 @@ def main():
 
         results_data = {
             'index': filtered_indices,
-            'cosine_similarity': filtered_cos_scores,
-            'relevance_score': filtered_scores,
+            'hybrid_score': filtered_cos_scores if use_hybrid else np.zeros(len(filtered_indices)),
+            'semantic_score': component_scores_dict['semantic'][filtered_indices] if component_scores_dict else np.zeros(len(filtered_indices)),
+            'bm25_score': component_scores_dict.get('bm25', np.zeros(len(selected_embeddings)))[filtered_indices] if component_scores_dict else np.zeros(len(filtered_indices)),
+            'char_ngram_score': component_scores_dict.get('char_ngram', np.zeros(len(selected_embeddings)))[filtered_indices] if component_scores_dict else np.zeros(len(filtered_indices)),
+            'rerank_score': filtered_scores,
             date_col: st.session_state.metadata[date_col][filtered_indices],
             score_col: st.session_state.metadata[score_col][filtered_indices]
         }
@@ -766,9 +784,9 @@ def main():
         for text_col in CONFIG['text_columns']:
             available_columns.append(search_target_display[text_col['name']])
 
-        # Add similarity and relevance score columns
-        available_columns.append('cosine_similarity')
-        available_columns.append('relevance_score')
+        # Add all search score columns
+        score_columns = ['hybrid_score', 'semantic_score', 'bm25_score', 'char_ngram_score', 'rerank_score']
+        available_columns.extend(score_columns)
 
         # Add date and score columns from config
         date_col = CONFIG['metadata']['date_column']
@@ -778,7 +796,7 @@ def main():
         selected_columns = st.multiselect(
             "Select columns to display:",
             options=available_columns,
-            default=[search_target_display[selected_target], date_col, score_col][:2],
+            default=[search_target_display[selected_target], 'rerank_score', date_col, score_col],
             help="Choose which columns to show in the preview table"
         )
 
@@ -796,10 +814,18 @@ def main():
                 column_config[date_col] = st.column_config.DateColumn(date_col, format="YYYY-MM-DD", width="small")
             if score_col in selected_columns:
                 column_config[score_col] = st.column_config.NumberColumn(score_col, format="%.2f", width="small")
-            if 'cosine_similarity' in selected_columns:
-                column_config['cosine_similarity'] = st.column_config.NumberColumn("Cosine Similarity", format="%.4f", width="small")
-            if 'relevance_score' in selected_columns:
-                column_config['relevance_score'] = st.column_config.NumberColumn("Relevance Score", format="%.4f", width="small")
+
+            # Configure all score columns
+            if 'hybrid_score' in selected_columns:
+                column_config['hybrid_score'] = st.column_config.NumberColumn("Hybrid Score", format="%.4f", width="small", help="Combined score from semantic + BM25 + char n-gram")
+            if 'semantic_score' in selected_columns:
+                column_config['semantic_score'] = st.column_config.NumberColumn("Semantic Score", format="%.4f", width="small", help="Cosine similarity score")
+            if 'bm25_score' in selected_columns:
+                column_config['bm25_score'] = st.column_config.NumberColumn("BM25 Score", format="%.4f", width="small", help="Keyword matching score")
+            if 'char_ngram_score' in selected_columns:
+                column_config['char_ngram_score'] = st.column_config.NumberColumn("Char N-gram Score", format="%.4f", width="small", help="Typo-tolerant fuzzy matching score")
+            if 'rerank_score' in selected_columns:
+                column_config['rerank_score'] = st.column_config.NumberColumn("Rerank Score", format="%.4f", width="small", help="BGE cross-encoder relevance score")
 
             st.dataframe(
                 preview_df,
